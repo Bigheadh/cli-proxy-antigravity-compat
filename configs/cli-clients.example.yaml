@@ -1,5 +1,5 @@
 # ==============================================================================
-# Claude Code CLI / Codex CLI 接入 CLIProxyAPI v8.1.2 访问 Antigravity 联合配置参考
+# AI 编程客户端与中国大陆模型生态接入 CLIProxyAPI v8.1.2 访问 Antigravity 关键字配置参考
 # ==============================================================================
 #
 # 背景说明（职责严格分层，严守插件四不红线）：
@@ -8,17 +8,27 @@
 #    - 机制 A（HTTP 400 INVALID_ARGUMENT 严格 Proto3 Schema 校验）：
 #      残留的非 Proto 字段（如 request.stream、tools[].functionDeclarations[].defer_loading /
 #      cache_control、generationConfig.service_tier、Claude 5.5 结构化输出冲突工具等）会直接报 400。
-#      —— 由本仓库插件 `antigravity-compat` 在 RequestNormalizer (ToFormat == "antigravity") 阶段精准清理。
+#      —— 由本仓库插件 `antigravity-compat` 在 RequestNormalizer (ToFormat == "antigravity") 阶段精准清理；
+#         无论客户端是 Codex、Claude Code、OpenCode、Qoder、ZCode 还是其他国产编程工具，只要走
+#         /v1/chat/completions、/v1/responses、/v1/messages 或 /v1beta/models/* 入口均自动覆盖。
 #
-#    - 机制 B（第三方 CLI 默认系统提示词特征软限流，上游伪装返回短周期 HTTP 429）：
+#    - 机制 B（第三方 CLI / IDE 默认系统提示词与品牌特征软限流，上游伪装返回短周期 HTTP 429）：
 #      本插件严格遵守“不扫描提示词关键词、不改写用户消息与系统提示词”红线，绝不在插件内部触碰提示词。
-#      若用户使用原装 Claude Code CLI 或 OpenAI Codex CLI 直连反重力模型且希望规避提示词特征限流，
-#      可直接使用 CLIProxyAPI v8.1.2 原生内置在 AntigravityExecutor 内部的
-#      `antigravity.sensitive-patterns-replace` 配置（仅在 AntigravityExecutor 内对 systemInstruction 生效，
-#      对 Codex 渠道 gpt-6.2-sol / gpt-6.2-astra、Claude API、Gemini API 100% 零影响）。
+#      若需规避客户端默认系统提示词中的工具名、厂商名或模型名特征，可按需选用 CLIProxyAPI v8.1.2
+#      原生内置在 AntigravityExecutor 内部的 `sensitive-patterns-replace`（有序 Go RE2 正则替换）：
+#      仅在 AntigravityExecutor 内对 systemInstruction 生效，对 Codex、Claude API、Gemini API
+#      及中国大陆各模型原生渠道 100% 零影响。
 #
-# 2. 下列配置已在 Linux 环境配合原版 CLIProxyAPI v8.1.2 (85225381)、Claude Code CLI 2.1.332
-#    与 Codex CLI 0.172.0 实测验证通过（按需合并至您的 config.yaml）：
+# 2. 验证状态说明：
+#    - 【已实测验证】：OpenAI Codex CLI (0.172.0)、Anthropic Claude Code CLI (2.1.332)。
+#    - 【仅收集关键字，未做实机验证】：OpenCode、Qoder、ZCode 及中国大陆其他主流 AI 编程工具与大模型关键字。
+#      建议按实际使用的客户端分段裁剪合入 config.yaml，避免无谓加载未使用的规则。
+#
+# 3. CLIProxyAPI v8.1.2 配置层级提示：
+#    - 若您的 config.yaml 声明了 `config-version: 8`（v8 标准布局），请将下方 `antigravity:` 块放在
+#      `oauth.providers.antigravity` 路径下；
+#    - 若您的 config.yaml 未声明 `config-version`（旧版兼容布局），可直接放在顶层 `antigravity:` 下。
+#    - 每条规则均按“域名/包名/路径 -> 身份声明句 -> 工具名 -> 厂商与模型名”顺序排列，避免局部抢先匹配破坏域名结构。
 
 # 第一层：本仓库插件（负责纯协议层 HTTP 400 不兼容字段清理与无证据字段脱敏诊断）
 plugins:
@@ -30,24 +40,206 @@ plugins:
       diagnostics_endpoint_enabled: true
       diagnostics_log_level: "debug"
 
-# 第二层（可选）：CLIProxyAPI v8.1.2 原生内置 Antigravity 专属配置
-# 仅在您需要用原装 Claude Code CLI / Codex CLI 请求 Antigravity 模型时按需启用；
-# 纯 API / SDK 调用无需配置此段。
-antigravity:
-  sensitive-patterns-replace:
-    # 适配 OpenAI Codex CLI 默认系统指令特征
-    - pattern: "(?i)codex\\s+cli"
-      replace: "Workspace CLI"
-    - pattern: "(?i)openai"
-      replace: "Core Team"
-    # 适配 Claude Code CLI 默认系统指令特征
-    - pattern: "(?i)claude\\s+agent\\s+sdk"
-      replace: "Agent Runtime SDK"
-    - pattern: "(?i)claude\\s+code"
-      replace: "Workspace CLI"
-    - pattern: "(?i)anthropics?/claude-code"
-      replace: "workspace/agent-cli"
-    - pattern: "(?i)claude\\.ai/code"
-      replace: "workspace.local/code"
-    - pattern: "(?i)you\\s+are\\s+a\\s+claude\\s+agent"
-      replace: "You are a coding assistant"
+# 第二层（可选）：CLIProxyAPI v8.1.2 原生内置 Antigravity 系统指令特征替换配置
+# （v8 布局下路径为 oauth.providers.antigravity；旧版布局下路径为顶层 antigravity）
+oauth:
+  providers:
+    antigravity:
+      sensitive-patterns-replace:
+        # ======================================================================
+        # 一、【已实测验证】海外主流官方 CLI
+        # ======================================================================
+
+        # 1.1 OpenAI Codex CLI
+        - pattern: '(?i)openai\.com'
+          replacement: "workspace.local"
+        - pattern: '(?i)\bcodex\s+cli\b'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)you\s+are\s+codex\b'
+          replacement: "You are a coding assistant"
+        - pattern: '(?i)\bopenai\b'
+          replacement: "Core Team"
+
+        # 1.2 Anthropic Claude Code CLI
+        - pattern: '(?i)anthropics?/claude-code'
+          replacement: "workspace/agent-cli"
+        - pattern: '(?i)claude\.ai/code'
+          replacement: "workspace.local/code"
+        - pattern: '(?i)\bclaude\s+agent\s+sdk\b'
+          replacement: "Agent Runtime SDK"
+        - pattern: '(?i)you\s+are\s+a\s+claude\s+agent\b'
+          replacement: "You are a coding assistant"
+        - pattern: '(?i)\bclaude\s+code\b'
+          replacement: "Workspace CLI"
+
+        # ======================================================================
+        # 二、【仅收集关键字，未做验证】OpenCode 及中国大陆主流 AI 编程工具与大模型生态
+        # ======================================================================
+
+        # 2.1 OpenCode（开源终端/桌面 AI 编程 Agent：anomalyco/opencode、opencode-ai）
+        - pattern: '(?i)(?:anomalyco|sst|opencode-ai)/opencode'
+          replacement: "workspace/agent-cli"
+        - pattern: '(?i)@opencode-ai/[a-z0-9_-]+'
+          replacement: "@workspace/sdk"
+        - pattern: '(?i)opencode\.ai'
+          replacement: "workspace.local"
+        - pattern: '(?i)\.opencode/'
+          replacement: ".agent/"
+        - pattern: '(?i)you\s+are\s+opencode\b'
+          replacement: "You are a coding assistant"
+        - pattern: '(?i)\bopencode(?:\s+(?:cli|agent|ide|desktop|sdk|go|zen))?\b'
+          replacement: "Workspace CLI"
+
+        # 2.2 阿里系：Qoder / Qoder CN / Qwen Code / 通义灵码 (Lingma) / 通义千问 (Qwen)
+        - pattern: '(?i)@qoder-ai/[a-z0-9_-]+'
+          replacement: "@workspace/sdk"
+        - pattern: '(?i)qwenlm/qwen-code'
+          replacement: "workspace/agent-cli"
+        - pattern: '(?i)(?:[a-z0-9-]+\.)?(?:qoder\.com|qwen\.ai|aliyuncs\.com|alibabacloud\.com|aliyun\.com)'
+          replacement: "workspace.local"
+        - pattern: '(?i)\.(?:qoder|qwen)/'
+          replacement: ".agent/"
+        - pattern: '(?i)you\s+are\s+(?:qoder|qwen(?:\s+code)?)\b'
+          replacement: "You are a coding assistant"
+        - pattern: '(?i)\bqoder(?:cli(?:cn)?|work|\s+(?:cn|cli|ide|agent))?\b'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bqwen[-_\s]?code\b|\bqwencode\b|\bqwenpaw\b|\bqwenlm\b'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\btongyi\s+lingma\b|\blingma\b|通义灵码'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\btongyi(?:\s+qianwen)?\b|\bdashscope\b|\balibaba(?:\s+(?:group|cloud))?\b|\baliyun\b|通义千问|阿里云|百炼'
+          replacement: "Core Team"
+        - pattern: '(?i)\bqwen(?:[0-9.]*|-(?:max|plus|turbo|coder|vl|long)[a-z0-9.-]*)?\b'
+          replacement: "Core Model"
+
+        # 2.3 智谱系：ZCode / Z.ai Code / CodeGeeX / AutoGLM / BigModel / GLM 系列
+        - pattern: '(?i)zai-org/zcode'
+          replacement: "workspace/agent-cli"
+        - pattern: '(?i)window\.zcode'
+          replacement: "window.workspace"
+        - pattern: '(?i)(?:[a-z0-9-]+\.)?(?:z\.ai|bigmodel\.cn|chatglm\.cn|codegeex\.cn)'
+          replacement: "workspace.local"
+        - pattern: '(?i)\.zcode/'
+          replacement: ".agent/"
+        - pattern: '(?i)you\s+are\s+(?:an\s+interactive\s+)?(?:zcode|z\.ai\s+code|z\s+code)(?:\s+agent)?'
+          replacement: "You are a coding assistant"
+        - pattern: '(?i)\bzcode(?:-cli|\s+(?:desktop|agent|ide|cli))?\b|\bz\.ai\s+code\b|\bz\s+code\b'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bcodegeex\b|\bautoglm\b'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bzai-org\b|\bbigmodel\b|\bzhipu(?:\s*ai)?\b|智谱(?:清言|AI)?'
+          replacement: "Core Team"
+        - pattern: '(?i)\bchatglm[0-9a-z.-]*\b|\bglm(?:-[0-9a-z.]+|\s+coding(?:\s+plan)?)\b'
+          replacement: "Core Model"
+
+        # 2.4 月之暗面系 (Moonshot AI)：Kimi Code / Kimi CLI / Kimi Work / Kimi 系列
+        - pattern: '(?i)@moonshot-ai/[a-z0-9_-]+|moonshotai/kimi-(?:code|cli)'
+          replacement: "workspace/agent-cli"
+        - pattern: '(?i)(?:[a-z0-9-]+\.)?(?:kimi\.(?:ai|com)|moonshot\.(?:cn|ai))'
+          replacement: "workspace.local"
+        - pattern: '(?i)\.kimi(?:-code)?/'
+          replacement: ".agent/"
+        - pattern: '(?i)you\s+are\s+kimi(?:\s+k[0-9.]+|\s+code)?\b'
+          replacement: "You are a coding assistant"
+        - pattern: '(?i)\bkimi[-_\s]?(?:code|cli|work)\b'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bmoonshot(?:\s+ai|-ai)?\b|月之暗面'
+          replacement: "Core Team"
+        - pattern: '(?i)\bkimi(?:\s+k[0-9.]+|-k[0-9.]+)?\b'
+          replacement: "Core Model"
+
+        # 2.5 深度求索系 (DeepSeek)：DeepSeek Harness (dsh) / DeepSeek Coder / DeepSeek 系列
+        - pattern: '(?i)deepseek-ai/[a-z0-9_-]+'
+          replacement: "workspace/agent-cli"
+        - pattern: '(?i)(?:[a-z0-9-]+\.)?deepseek\.com'
+          replacement: "workspace.local"
+        - pattern: '(?i)\.dsh/'
+          replacement: ".agent/"
+        - pattern: '(?i)current\s+dsh\s+file\s+policy'
+          replacement: "Current workspace file policy"
+        - pattern: '(?i)\bdeepseek\s+harness\b|\bdsh\s+(?:cli|agent|harness)\b'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bdeepseek(?:\s+coder|\s+ai|-[a-z0-9.]+)?\b|深度求索'
+          replacement: "Core Model"
+
+        # 2.6 腾讯系：CodeBuddy / WorkBuddy / WorkBuddy AI / 腾讯云代码助手 / 混元 (Hunyuan)
+        - pattern: '(?i)@tencent-ai/codebuddy-code'
+          replacement: "workspace/agent-cli"
+        - pattern: '(?i)(?:[a-z0-9-]+\.)?(?:codebuddy\.(?:cn|ai)|workbuddy\.(?:cn|ai))'
+          replacement: "workspace.local"
+        - pattern: '(?i)you\s+are\s+(?:codebuddy|workbuddy)\b'
+          replacement: "You are a coding assistant"
+        - pattern: '(?i)\bcodebuddy(?:\s+(?:code|cli|ide|agent))?\b|\baskcodebuddy\b|腾讯云代码助手'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bworkbuddy(?:\s+ai)?\b'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\btencent(?:\s+cloud)?\b|\bhunyuan(?:-[a-z0-9.]+)?\b|腾讯混元'
+          replacement: "Core Team"
+
+        # 2.7 字节跳动系：Trae / Trae CN / Trae CLI / MarsCode / 豆包 (Doubao) / 火山方舟
+        - pattern: '(?i)(?:[a-z0-9-]+\.)?(?:trae\.(?:ai|com\.cn)|marscode\.(?:com|cn)|volcengine\.com)'
+          replacement: "workspace.local"
+        - pattern: '(?i)you\s+operate\s+exclusively\s+in\s+trae(?:\s+ai)?'
+          replacement: "You operate in the development workspace"
+        - pattern: '(?i)\btrae(?:\s+(?:ai|cn|cli|ide))?\b|\bmarscode\b'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bbytedance\b|\bvolcengine\b|字节跳动|火山引擎|火山方舟'
+          replacement: "Core Team"
+        - pattern: '(?i)\bdoubao(?:-[a-z0-9.]+)?\b|\bseed[-_\s]?coder\b|豆包'
+          replacement: "Core Model"
+
+        # 2.8 百度系：文心快码 (Baidu Comate / ComateCLI) / 文心一言 (ERNIE) / 百度千帆
+        - pattern: '(?i)comate\.baidu\.com'
+          replacement: "workspace.local"
+        - pattern: '(?i)\bbaidu\s*comate\b|\bcomate(?:\s*cli|\s+agent|\s+ide)?\b|文心快码'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bqianfan\b|\bbaidu(?:\s+cloud)?\b|百度智能云|百度千帆'
+          replacement: "Core Team"
+        - pattern: '(?i)\bernie(?:-[0-9a-z.]+)?\b|\bwenxin\b|文心一言'
+          replacement: "Core Model"
+
+        # 2.9 小米系：MiMoCode (MiMo Code) / Xiaomi MiMo 系列
+        - pattern: '(?i)xiaomimimo/mimo-code'
+          replacement: "workspace/agent-cli"
+        - pattern: '(?i)\bmimo[-_\s]?code\b|\bxiaomimimo\b'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bmimo-v[0-9.]+\b|\bxiaomi\s+mimo\b|小米\s*MiMo'
+          replacement: "Core Model"
+
+        # 2.10 稀宇科技系 (MiniMax)：MiniMax Code / MiniMax Agent / 海螺 AI
+        - pattern: '(?i)minimax-ai/[a-z0-9_-]+'
+          replacement: "workspace/agent-cli"
+        - pattern: '(?i)(?:[a-z0-9-]+\.)?(?:minimax\.(?:io|chat)|minimaxi\.com)'
+          replacement: "workspace.local"
+        - pattern: '(?i)conversational\s+assistant\s+for\s+minimax\s+agent'
+          replacement: "coding assistant"
+        - pattern: '(?i)\bminimax[-_\s]?(?:code|agent)\b'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bminimax(?:-ai|-m[0-9.]+)?\b|\bhailuo(?:\s*ai)?\b|稀宇科技|海螺\s*AI'
+          replacement: "Core Model"
+
+        # 2.11 阶跃星辰系 (StepFun)：StepCode / 跃问
+        - pattern: '(?i)(?:[a-z0-9-]+\.)?stepfun\.com'
+          replacement: "workspace.local"
+        - pattern: '(?i)\bstep[-_\s]?code\b'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bstepfun\b|阶跃星辰|跃问'
+          replacement: "Core Team"
+
+        # 2.12 华为 / 京东 / 讯飞 / 美团 / 非十 / 商汤 / 百川 / 零一万物 / 面壁 / 聚合平台
+        - pattern: '(?i)(?:joycode\.jd\.com|codearts\.huaweicloud\.com|siliconflow\.(?:cn|com)|modelscope\.cn)'
+          replacement: "workspace.local"
+        - pattern: '(?i)\bcodearts(?:\s+(?:snap|agent|ide|cli))?\b|\bdeveco(?:\s+(?:code|studio|assistant))?\b|华为云码道'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bjoycode(?:r)?\b|\biflycode\b|\bcatpaw\b|\bfitten\s*code\b|\braccoon\s+code\b|星火代码|代码小浣熊'
+          replacement: "Workspace CLI"
+        - pattern: '(?i)\bhuawei\s+cloud\b|\biflytek\b|\bsparkdesk\b|\bsensenova\b|\bbaichuan(?:-[0-9a-z.]+)?\b|\b01\.ai\b|\blingyiwanwu\b|\bmodelbest\b|\bsiliconflow\b|\bmodelscope\b|盘古大模型|讯飞星火|商汤日日新|百川智能|零一万物|面壁智能|硅基流动|魔搭社区'
+          replacement: "Core Team"
+        - pattern: '(?i)\blongcat\b|\byi-(?:coder|lightning|large|medium|[0-9]+b)[a-z0-9.-]*\b|\bminicpm(?:-[0-9a-z.]+)?\b'
+          replacement: "Core Model"
+
+        # 2.13 国内高频搭配的开源 IDE 编程扩展（Cline / Roo Code / Kilo Code）
+        - pattern: '(?i)you\s+are\s+(?:cline|roo|kilo\s+code)\b'
+          replacement: "You are a coding assistant"
+        - pattern: '(?i)\b(?:cline|roo\s*code|kilo\s*code)\b'
+          replacement: "Workspace CLI"

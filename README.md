@@ -153,7 +153,7 @@ make package
 ```
 
 ### 3. 配置启用
-将 `dist/antigravity-compat.so` 复制到 CLIProxyAPI 的 `plugins/` 目录，并在 `config.yaml` 中加入（完整示例见 [`configs/plugin.example.yaml`](configs/plugin.example.yaml)；若接入原装 Claude Code CLI / Codex CLI 客户端，可参考职责分层的 [`configs/cli-clients.example.yaml`](configs/cli-clients.example.yaml)）：
+将 `dist/antigravity-compat.so` 复制到 CLIProxyAPI 的 `plugins/` 目录，并在 `config.yaml` 中加入（完整示例见 [`configs/plugin.example.yaml`](configs/plugin.example.yaml)）：
 
 ```yaml
 plugins:
@@ -165,6 +165,10 @@ plugins:
       diagnostics_endpoint_enabled: true
       diagnostics_log_level: "debug"
 ```
+
+若使用编程客户端通过 `CLIProxyAPI` 访问 Antigravity 模型且需按职责分层配置原生 `sensitive-patterns-replace` 系统指令特征替换，可参考：
+- **配置模板**：[`configs/cli-clients.example.yaml`](configs/cli-clients.example.yaml)
+- **关键字收录清单**：[`docs/cli-and-cn-models-keywords.md`](docs/cli-and-cn-models-keywords.md)（其中 `Codex CLI`、`Claude Code CLI` 已实测验证；`OpenCode`、`Qoder`、`ZCode`、`Kimi Code`、`DeepSeek Harness`、`CodeBuddy`/`WorkBuddy`、`Trae`/`MarsCode`、`文心快码`、`MiMoCode`、`MiniMax Code`、`StepCode` 等中国大陆编程工具与大模型条目已收集整理关键字，标注为未做实机验证）。
 
 ---
 
