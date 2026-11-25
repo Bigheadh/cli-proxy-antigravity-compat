@@ -1,0 +1,19 @@
+# CLIProxyAPI v8.1.2（提交 85225381）启用 Antigravity 请求兼容插件最小配置示例
+# 将编译产物 antigravity-compat.so / .dylib / .dll 放入 plugins.dir 目录后，按需合并以下配置。
+
+plugins:
+  enabled: true
+  dir: "plugins"
+  configs:
+    antigravity-compat:
+      enabled: true
+      # 是否开启受管理密钥保护的只读脱敏诊断接口：
+      # GET /v0/management/plugins/antigravity-compat/diagnostics
+      diagnostics_endpoint_enabled: true
+      # 脱敏诊断与规则命中日志级别：debug（默认）、info、warn、off
+      # 日志仅记录字段路径、JSON 值类型、入口协议与脱敏模型名，绝不记录任何字段值或提示词原文
+      diagnostics_log_level: "debug"
+      # 如需在排障对比时临时关闭某条规则，可填入规则编号（如 ["AG-COMPAT-001"]），默认留空启用全部 6 条已证实规则
+      disabled_rules: []
+      # 内存中聚合保留的未证实字段路径上限（防止异常高基数键占用内存，范围 16-4096）
+      max_diagnostic_paths: 256

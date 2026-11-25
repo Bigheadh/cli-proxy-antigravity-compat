@@ -1,0 +1,53 @@
+# ==============================================================================
+# Claude Code CLI / Codex CLI 接入 CLIProxyAPI v8.1.2 访问 Antigravity 联合配置参考
+# ==============================================================================
+#
+# 背景说明（职责严格分层，严守插件四不红线）：
+#
+# 1. Google Cloud Code PA (Antigravity) 上游存在两类完全不同的请求拦截机制：
+#    - 机制 A（HTTP 400 INVALID_ARGUMENT 严格 Proto3 Schema 校验）：
+#      残留的非 Proto 字段（如 request.stream、tools[].functionDeclarations[].defer_loading /
+#      cache_control、generationConfig.service_tier、Claude 5.5 结构化输出冲突工具等）会直接报 400。
+#      —— 由本仓库插件 `antigravity-compat` 在 RequestNormalizer (ToFormat == "antigravity") 阶段精准清理。
+#
+#    - 机制 B（第三方 CLI 默认系统提示词特征软限流，上游伪装返回短周期 HTTP 429）：
+#      本插件严格遵守“不扫描提示词关键词、不改写用户消息与系统提示词”红线，绝不在插件内部触碰提示词。
+#      若用户使用原装 Claude Code CLI 或 OpenAI Codex CLI 直连反重力模型且希望规避提示词特征限流，
+#      可直接使用 CLIProxyAPI v8.1.2 原生内置在 AntigravityExecutor 内部的
+#      `antigravity.sensitive-patterns-replace` 配置（仅在 AntigravityExecutor 内对 systemInstruction 生效，
+#      对 Codex 渠道 gpt-6.2-sol / gpt-6.2-astra、Claude API、Gemini API 100% 零影响）。
+#
+# 2. 下列配置已在 Linux 环境配合原版 CLIProxyAPI v8.1.2 (85225381)、Claude Code CLI 2.1.332
+#    与 Codex CLI 0.172.0 实测验证通过（按需合并至您的 config.yaml）：
+
+# 第一层：本仓库插件（负责纯协议层 HTTP 400 不兼容字段清理与无证据字段脱敏诊断）
+plugins:
+  enabled: true
+  dir: "plugins"
+  configs:
+    antigravity-compat:
+      enabled: true
+      diagnostics_endpoint_enabled: true
+      diagnostics_log_level: "debug"
+
+# 第二层（可选）：CLIProxyAPI v8.1.2 原生内置 Antigravity 专属配置
+# 仅在您需要用原装 Claude Code CLI / Codex CLI 请求 Antigravity 模型时按需启用；
+# 纯 API / SDK 调用无需配置此段。
+antigravity:
+  sensitive-patterns-replace:
+    # 适配 OpenAI Codex CLI 默认系统指令特征
+    - pattern: "(?i)codex\\s+cli"
+      replace: "Workspace CLI"
+    - pattern: "(?i)openai"
+      replace: "Core Team"
+    # 适配 Claude Code CLI 默认系统指令特征
+    - pattern: "(?i)claude\\s+agent\\s+sdk"
+      replace: "Agent Runtime SDK"
+    - pattern: "(?i)claude\\s+code"
+      replace: "Workspace CLI"
+    - pattern: "(?i)anthropics?/claude-code"
+      replace: "workspace/agent-cli"
+    - pattern: "(?i)claude\\.ai/code"
+      replace: "workspace.local/code"
+    - pattern: "(?i)you\\s+are\\s+a\\s+claude\\s+agent"
+      replace: "You are a coding assistant"
